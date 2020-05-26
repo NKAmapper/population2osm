@@ -1,5 +1,5 @@
 # population2osm
-Extracts most recent quarterly population numbers from SSB and updates OSM file
+Extracts most recent quarterly population numbers from SSB and updates OSM file.
 
 ### Usage
 
@@ -18,18 +18,18 @@ Extracts most recent quarterly population numbers from SSB and updates OSM file
 
 * As Svalbard residents are included in the Norway mainland population numbers, the population of Svalbard will  not be updated by this program. There is a [separate SSB reporting for Svalbard](https://www.ssb.no/en/befolkning/statistikker/befsvalbard/halvaar), which could be updated manually.
 
-* SSB updates the quarterly population numbers also between quarters. The program may be run at any time to pick up such corrections.
+* SSB also updates the quarterly population numbers between quarters. The program may be run at any time to pick up any such corrections.
 
-* The following predefined SSB queries are being used:
+* The following predefined SSB queries are used:
   * Full country: [Population change. Whole country, latest quarter](https://data.ssb.no/api/v0/dataset/1104?lang=en)
   * Counties: [Population changes. Counties, latest quarter](https://data.ssb.no/api/v0/dataset/1102?lang=en)
   * Municipalities: [Population changes. Municipalities, latest quarter](https://data.ssb.no/api/v0/dataset/1108?lang=en)
 
-* Population data from SSB is licensed under the NLOD license. OpenStreetMap has obtained the [permission](https://lists.nuug.no/pipermail/kart/2018-January/006345.html) to use all NLOD data from SSB.
+* Population data from SSB is [licensed under the NLOD 2.0 license](https://www.ssb.no/en/informasjon/copyright). OpenStreetMap has obtained [permission](https://lists.nuug.no/pipermail/kart/2018-January/006345.html) to use all NLOD data from SSB.
 
 
 ### Reference
 
 * [Statistics Norway (SSB)](https://www.ssb.no/en)
-* [SSB api](https://www.ssb.no/en/omssb/tjenester-og-verktoy/api)
+* [SSB API](https://www.ssb.no/en/omssb/tjenester-og-verktoy/api)
 * [SSB population topic page](https://www.ssb.no/en/befolkning)
