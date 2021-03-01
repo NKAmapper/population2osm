@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf8
 
 # population2osm
@@ -8,12 +8,12 @@
 
 import sys
 import json
-import urllib
-import urllib2
+import urllib.parse
+import urllib.request
 from xml.etree import ElementTree as ET
 
 
-version = "0.3.0"
+version = "0.4.0"
 
 request_header = { "User-Agent": "osm-no/population2osm" }
 
@@ -43,8 +43,8 @@ def load_ssb (api_ref):
 
 	# Load predefined data from SSB api
 
-	request = urllib2.Request("http://data.ssb.no/api/v0/dataset/%s.json?lang=no" % api_ref, headers=request_header)
-	file = urllib2.urlopen(request)
+	request = urllib.request.Request("http://data.ssb.no/api/v0/dataset/%s.json?lang=no" % api_ref, headers=request_header)
+	file = urllib.request.urlopen(request)
 	ssb_data = json.load(file)
 	file.close()
 
@@ -58,7 +58,7 @@ def load_ssb (api_ref):
 
 	entities = {}
 
-	for entity_id, entity_position in entity_index.iteritems():
+	for entity_id, entity_position in iter(entity_index.items()):
 		entities[entity_id] = {
 			'name': ssb_data['dataset']['dimension']['Region']['category']['label'][entity_id],
 			'population': str(ssb_data['dataset']['value'][ entity_position * data_entries + data_position ])
@@ -66,7 +66,7 @@ def load_ssb (api_ref):
 
 	# Determine record date of population numbers
 
-	quarter = ssb_data['dataset']['dimension']['Tid']['category']['index'].keys()[0]  # Format: 2020K1
+	quarter = list(ssb_data['dataset']['dimension']['Tid']['category']['index'])[0]  # Format: 2020K1
 	
 	if quarter[-1] == "4":
 		date = str(int(quarter[:4]) + 1)
@@ -110,8 +110,8 @@ if __name__ == '__main__':
 	message ("\nLoading country from OSM...\n")
 
 	query = '[out:xml][timeout:90];(relation["name"="Norge"]["type"="boundary"]["admin_level"="2"];);out meta;'
-	request = urllib2.Request("https://overpass-api.de/api/interpreter?data=" + urllib.quote(query), headers=request_header)
-	file = urllib2.urlopen(request)
+	request = urllib.request.Request("https://overpass-api.de/api/interpreter?data=" + urllib.parse.quote(query), headers=request_header)
+	file = urllib.request.urlopen(request)
 	tree_osm = ET.parse(file)
 	root_osm = tree_osm.getroot()
 	file.close()
@@ -150,8 +150,8 @@ if __name__ == '__main__':
 	message ("\nLoading counties from OSM...\n")
 
 	query = '[out:xml][timeout:90];(area["name"="Norge"]["type"="boundary"];)->.a;(relation["place"="county"](area.a););out meta;'
-	request = urllib2.Request("https://overpass-api.de/api/interpreter?data=" + urllib.quote(query), headers=request_header)
-	file = urllib2.urlopen(request)
+	request = urllib.request.Request("https://overpass-api.de/api/interpreter?data=" + urllib.parse.quote(query), headers=request_header)
+	file = urllib.request.urlopen(request)
 	tree = ET.parse(file)
 	root = tree.getroot()
 	file.close()
@@ -192,7 +192,7 @@ if __name__ == '__main__':
 
 		root_osm.append(relation)
 
-	for ref, county in counties.iteritems():
+	for ref, county in iter(counties.items()):
 		message ("County %s %s not found in OSM\n" % (ref, county['name']))
 
 
@@ -201,8 +201,8 @@ if __name__ == '__main__':
 	message ("\nLoading municipalities from OSM...\n")
 
 	query = '[out:xml][timeout:90];(area["name"="Norge"]["type"="boundary"];)->.a;(relation["place"="municipality"](area.a););out meta;'
-	request = urllib2.Request("https://overpass-api.de/api/interpreter?data=" + urllib.quote(query), headers=request_header)
-	file = urllib2.urlopen(request)
+	request = urllib.request.Request("https://overpass-api.de/api/interpreter?data=" + urllib.parse.quote(query), headers=request_header)
+	file = urllib.request.urlopen(request)
 	tree = ET.parse(file)
 	root = tree.getroot()
 	file.close()
@@ -243,7 +243,7 @@ if __name__ == '__main__':
 
 		root_osm.append(relation)
 
-	for ref, municipality in municipalities.iteritems():
+	for ref, municipality in iter(municipalities.items()):
 		message ("Municipality %s %s not found in OSM\n" % (ref, municipality['name']))
 
 
