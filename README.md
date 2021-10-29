@@ -36,20 +36,20 @@ Extracts population numbers for [urban settlements ("tettsteder")](https://www.s
 
 ### Usage
 
-<code>python urban_population2osm.py</code> (no parameter)
+<code>python urban_population2osm.py [year] [CSV filename]</code>
 
 
 ### Notes
 
 * This program will:
-  * Load population numbers for urban settlements from SSB.
+  * Load population numbers for urban settlements from downloaded SSB web table file.
   * Load urban settlements (place objects) with the _ref:ssb_tettsted_ tag for Norway from OSM.
   * Update the _population_ and _population:date_ tags of the settlements.
   * Produce a _tettsted.osm_ file ready for further editing and uploading to OSM through JOSM.
   
 * The urban settlement population numbers are used for the _place=city/town/village_ etc nodes. This has the implication that the population numbers for place=city/town will be different from the corresponding municipality relations (could be either smaller or bigger). For example the population of the Arendal place=town node will be different from the Arendal municipality relation.
 
-* The SSB input table and source date must be defined in the program. The program accepts the SSB municipality table on [this web page](https://www.ssb.no/en/befolkning/statistikker/beftett) in CSV format (link below table 1 at the time of writing). The table is updated by SSB once a year, usually in October, and gets a new url link each year.
+* The program accepts the SSB municipality table on [this web page](https://www.ssb.no/en/befolkning/statistikker/beftett) in CSV format (download link for table 1, at the time of writing). The table is updated by SSB once a year, usually in October.
 
 ## 3) Reference
 
