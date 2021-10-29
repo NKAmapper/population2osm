@@ -1,31 +1,33 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf8
 
 # urban_population2osm
 # Extracts urban settlements with population numbers from SSB and updates OSM.
-# Produces OSM file ready for additional edits before upload.
+# Produces OSM file ready for additional edits before upload, filename 'tettsted_<year>.osm'
 # Input CSV on: https://www.ssb.no/en/befolkning/statistikker/beftett.
+# Usage: urban_population2osm.py <year> <CSV filename>
 
 
 import json
-import cgi
+import html
 import sys
-import time
 import csv
-import urllib
-import urllib2
-import re
-from io import BytesIO
+import urllib.request, urllib.parse, urllib.error
+from io import StringIO, TextIOWrapper
 from xml.etree import ElementTree as ET
 
 
-version = "0.2.0"
+version = "0.3.0"
 
 request_header = { "User-Agent": "osm-no/population2osm" }
 
-ssb_table = "433415"  # for 2020 CSV table (2019: 407816)
+# SSB tables used before 2021
+ssb_table = {
+	'2019': '407816',
+	'2020': '433415'
+}
 
-update_date = "2020-01-01"  # Tag to OSM
+update_date = "-01-01"  # Tag to OSM
 
 source = "SSB - befolkning i tettstedet"  # Tag to OSM
 
@@ -65,8 +67,9 @@ def make_osm_line(key,value):
 	global file
 
 	if value:
-		encoded_value = cgi.escape(value.encode('utf-8'),True)
+		encoded_value = html.escape(value).strip()
 		file.write ('    <tag k="' + key + '" v="' + encoded_value + '" />\n')
+
 
 
 # Output message
@@ -77,71 +80,40 @@ def message (line):
 	sys.stdout.flush()
 
 
-# Open file/api, try up to 5 times, each time with double sleep time
-
-def try_urlopen (url):
-
-	tries = 0
-	while tries < 5:
-		try:
-			return urllib2.urlopen(url)
-
-		except urllib2.HTTPError, e:
-			if e.code in [429, 503, 504]:  # "Too many requests", "Service unavailable" or "Gateway timed out"
-				if tries  == 0:
-					message ("\n") 
-				message ("\r\tRetry %i in %ss... " % (tries + 1, 5 * (2**tries)))
-				time.sleep(5 * (2**tries))
-				tries += 1
-			else:
-				message ("\n\nHTTP error %i: %s\n" % (e.code, e.reason))
-				message ("%s\n" % url.get_full_url())
-				sys.exit()
-
-		except urllib2.URLError, e:  # Mostly "Connection reset by peer"
-			if tries  == 0:
-				message ("\n") 
-			message ("\r\tRetry %i in %ss... " % (tries + 1, 5 * (2**tries)))
-			time.sleep(5 * (2**tries))
-			tries += 1
-	
-	message ("\n\nError: %s\n" % e.reason)
-	message ("%s\n\n" % url.get_full_url())
-	sys.exit()
-
-
 
 # Geocoding with SSR
+# Search is within given municipality number
 
 def ssr_search (query_text, query_municipality):
 
-	query = "https://ws.geonorge.no/SKWS3Index/ssr/json/sok?navn=%s&epsgKode=4326&fylkeKommuneListe=%s&eksakteForst=true" \
-				% (urllib.quote(query_text.replace("(","").replace(")","").encode('utf-8')), query_municipality)
-	request = urllib2.Request(query, headers=request_header)
-	file = try_urlopen(request)
+	query = "https://ws.geonorge.no/stedsnavn/v1/navn?sok=%s&knr=%s&utkoordsys=4258&treffPerSide=10&side=1" \
+				% (urllib.parse.quote(query_text.replace("(","").replace(")","")), query_municipality)
+
+	request = urllib.request.Request(query, headers=request_header)
+	file = urllib.request.urlopen(request)
 	result = json.load(file)
 	file.close()
 
-	if "stedsnavn" in result:
-		if isinstance(result['stedsnavn'], dict):  # Single result is not in a list
-			result['stedsnavn'] = [ result['stedsnavn'] ]
+	if result['navn']:
 
 		# Return the first acceptable result
-		for place in result['stedsnavn']:
-			if (place['navnetype'].lower().strip() in ssr_types) and \
-					(ssr_types[ place['navnetype'].lower().strip() ] in ['Bebyggelse', 'OffentligAdministrasjon', 'Kultur']):
-				result_type = place['navnetype'].strip()
-				return (place['nord'], place['aust'], result_type)
+		for place in result['navn']:
+			if (place['navneobjekttype'].lower().strip() in ssr_types) and \
+					(ssr_types[ place['navneobjekttype'].lower().strip() ] in ['Bebyggelse', 'OffentligAdministrasjon', 'Kultur']):
+				result_type = place['navneobjekttype'].strip()
+				return (place['representasjonspunkt']['nord'], place['representasjonspunkt']['øst'], result_type)
 
-		#2nd iteration: All place types
-		for place in result['stedsnavn']:
-			result_type = place['navnetype'].strip()
-			return (place['nord'], place['aust'], result_type)
+		# All place types considered if no match above
+		place = result['navn'][0]
+		result_type = place['navneobjekttype'].strip()
+		return (place['representasjonspunkt']['nord'], place['representasjonspunkt']['øst'], result_type)
 	
 	return None
 
 
+
 # Add or update tag of OSM element
+# Return True if tag was modified
 
 def update_tag (element, key, value):
 
@@ -163,12 +135,22 @@ def update_tag (element, key, value):
 
 if __name__ == '__main__':
 
-	message ("\nUpdate population of urban settlements ('tettsteder') per %s\n\n" % update_date)
+	message ("\n*** Urban settlements ('tettsteder') population update ***\n")
+
+	if len(sys.argv) == 3:
+		update_year = sys.argv[1]
+		update_date = update_year + update_date
+		csv_filename = sys.argv[2]
+	else:
+		sys.exit("*** Please enter parameters 1) update year and 2) CSV file name from SSB\n")
+
+	message ("Update date: %s\n" % update_date)
+
 
 	# Load SSR name categories from Github
 
 	ssr_filename = 'https://raw.githubusercontent.com/osmno/geocode2osm/master/navnetyper.json'
-	file = urllib2.urlopen(ssr_filename)
+	file = urllib.request.urlopen(ssr_filename)
 	name_codes = json.load(file)
 	file.close()
 
@@ -181,11 +163,11 @@ if __name__ == '__main__':
 
 	# Load existing urban areas from OSM
 
-	message ("Load existing urban places from OSM ... ")
+	message ("\nLoad existing urban places from OSM ... ")
 
 	query = '[out:xml][timeout:90];(area["name"="Norge"]["type"="boundary"];)->.a;(nwr["ref:ssb_tettsted"](area.a););(._;>;);out meta;'
-	request = urllib2.Request("https://overpass-api.de/api/interpreter?data=" + urllib.quote(query), headers=request_header)
-	file = urllib2.urlopen(request)
+	request = urllib.request.Request("https://overpass-api.de/api/interpreter?data=" + urllib.parse.quote(query), headers=request_header)
+	file = urllib.request.urlopen(request)
 	osm_tree = ET.parse(file)
 	osm_root = osm_tree.getroot()
 	file.close()
@@ -199,7 +181,7 @@ if __name__ == '__main__':
 		if ref_tag != None:
 			ref = ref_tag.attrib['v']
 			if ref in osm_settlements:
-				message ("\nDuplicate 'ref:ssb_tettsted': %s  " % ref)
+				message ("\n\tDuplicate 'ref:ssb_tettsted': %s  " % ref)
 				duplicate = True
 			else:
 				osm_settlements[ref] = settlement
@@ -208,18 +190,21 @@ if __name__ == '__main__':
 	message ("%s settlements\n" % osm_count)
 
 	if duplicate:
-		message ("Please remove duplicates from OSM before continuing\n")
-		sys.exit()
+		sys.exit ("\n*** Please remove duplicates from OSM before continuing\n")
 
 
 	# Load SSB population data
 
-	message ("Load SSB population data ... ")
+	message ("\nLoad SSB population data ... ")
 
-	file = urllib2.urlopen("https://www.ssb.no/eksport/tabell.csv?key=%s" % ssb_table)
-	table_string = file.read().replace("\r", "\n").replace("\xc2\xa0", "").decode("utf-8-sig").encode("utf-8")
+#	Earlier code used for 2019/2020:
+#	file = urllib.request.urlopen("https://www.ssb.no/eksport/tabell.csv?key=%s" % ssb_table[ update_year ])
+#	table_string = TextIOWrapper(file, "utf-8").read().replace("\r", "\n").replace("\xa0", "")
 
-	ssb_table = csv.DictReader(BytesIO(table_string), fieldnames=['settlement','municipality','population_total','population_municipality'], delimiter=";")
+	file = open(csv_filename)
+	table_string = file.read()
+
+	ssb_table = csv.DictReader(StringIO(table_string), fieldnames=['settlement','municipality','population_total','population_municipality'], delimiter=";")
 
 	ssb_settlements = {}
 	ssb_count = 0
@@ -232,36 +217,38 @@ if __name__ == '__main__':
 			if row['settlement']:
 				ref = row['settlement'][0:4]
 				ssb_count += 1
-				name = row['settlement'][5:].decode("utf-8").replace(" i alt", "")
+				name = row['settlement'][5:].replace(" i alt", "")
 				if "(" in name:
 					name = name[0:name.find("(")].strip()
 				ssb_settlements[ref] = {
 					'name': name,
-					'population': row['population_total'],
+					'population': row['population_total'].replace(" ",""),
 					'municipalities': []
 				}
 
 				if row['municipality']:
 					municipality = {
 						'ref': row['municipality'][0:4],
-						'name': row['municipality'][5:].decode("utf-8"),
-						'population': row['population_total']
+						'name': row['municipality'][5:],
+						'population': row['population_total'].replace(" ", "")
 					}
 					ssb_settlements[ref]['municipalities'].append(municipality)
 
 			else:
 				municipality = {
 					'ref': row['municipality'][0:4],
-					'name': row['municipality'][5:].decode("utf-8"),
-					'population': row['population_municipality']
+					'name': row['municipality'][5:],
+					'population': row['population_municipality'].replace(" ", "")
 				}
-				ssb_settlements[ref]['municipalities'].append(municipality)		
+				ssb_settlements[ref]['municipalities'].append(municipality)	
 
 	file.close()
 	message ("%i urban settlements\n" % ssb_count)
 
 
 	# Split settlements into subareas according to dict
+
+	message ("\nMatch SSB and OSM settlements ...\n")
 
 	for settlement_ref in area_splits:
 		if settlement_ref in ssb_settlements:
@@ -292,11 +279,11 @@ if __name__ == '__main__':
 				ssb_count -= 1
 
 		else:
-			message ("Urban settlement %s in split table not used by SSB\n" % settlement_ref)
+			message ("\tUrban settlement %s in split table not used by SSB\n" % settlement_ref)
 
 	for settlement_ref in osm_settlements:
 		if settlement_ref not in ssb_settlements:
-			message ("Urban settlement %s in OSM not used by SSB\n" % settlement_ref)
+			message ("\tUrban settlement %s in OSM not used by SSB\n" % settlement_ref)
 
 
 	# Produce data
@@ -308,7 +295,7 @@ if __name__ == '__main__':
 	new_count = 0
 	notfound_count = 0
 
-	for settlement_ref, settlement in ssb_settlements.iteritems():
+	for settlement_ref, settlement in iter(ssb_settlements.items()):
 		if settlement_ref in osm_settlements:
 			# Update settlement tags
 
@@ -342,23 +329,23 @@ if __name__ == '__main__':
 
 			if result == None:
 				for municipality in settlement['municipalities']:
-					result = ssr_search(municipality['name'], municipality['ref'])
+					result = ssr_search(municipality['name'] + "*", municipality['ref'])
 					if result != None:
 						municipality_name = municipality['name']
 						only_municipality = True
 						break		
 
 			if result != None:
-				latitude = result[0]
-				longitude = result[1]
+				latitude = str(result[0])
+				longitude = str(result[1])
 				result_type = result[2]
-				message ("%s %s -> %s, %s" % (settlement['name'], settlement['population'], result_type, municipality_name))
+				message ("\t%s [%s] -> %s, %s" % (settlement['name'], settlement['population'], result_type, municipality_name))
 				if only_municipality:
-					message (" -> LOCATION NOT FOUND")
+					message (" -> *** LOCATION NOT FOUND")
 					notfound_count += 1
 				message ("\n")
 			else:
-				message ("%s %s -> LOCATION NOT FOUND\n" % (settlement['name'], settlement['population']))
+				message ("\t%s [%s] -> *** LOCATION NOT FOUND\n" % (settlement['name'], settlement['population']))
 				latitude = "0"
 				longitude = "0"
 				result_type = ""
@@ -394,15 +381,14 @@ if __name__ == '__main__':
 
 	# Produce OSM/XML file
 
-	filename = "tettsted_%s.osm" % (update_date[:4])
+	filename = "tettsted_%s.osm" % update_year
 	osm_root.set("generator", "population2osm v%s" % version)
 	osm_root.set("upload", "false")
 	osm_tree.write(filename, encoding="utf-8", method="xml", xml_declaration=True)
 
-	message ("\n%i urban settlements saved in file '%s'\n" % (ssb_count, filename))
-	message ("  Already correct: %i\n" % (ssb_count - update_count - new_count))
-	message ("  Updated:         %i\n" % update_count)
-	message ("  New:             %i\n" % new_count)
-	message ("  Not used:        %i\n" % (osm_count - ssb_count + new_count))
-	message ("  Check location:  %i\n\n" % notfound_count)
-
+	message ("\nSaving ... %i urban settlements saved in file '%s'\n" % (ssb_count, filename))
+	message ("\tAlready correct: %i\n" % (ssb_count - update_count - new_count))
+	message ("\tUpdated:         %i\n" % update_count)
+	message ("\tNew:             %i\n" % new_count)
+	message ("\tNot used:        %i\n" % (osm_count - ssb_count + new_count))
+	message ("\tCheck location:  %i\n\n" % notfound_count)
